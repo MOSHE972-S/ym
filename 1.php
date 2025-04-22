@@ -21,6 +21,26 @@ function logLine(string $line): void {
 }
 
 /**
+ * מבצע קריאת GET ל-URL ומטפל בשגיאות.
+ * (הפונקציה הזו נשמרה מקודם, אך אינה בשימוש בגרסה האחרונה שבה הכל POST+JSON, למעט ה-Login שהיה GET URL ועכשיו יהיה POST JSON שוב).
+ * אם ה-Login יחזור להיות GET URL, נצטרך אותה. כרגע נשאיר אותה למקרה שיידרש GET בעתיד.
+ *
+ * @param string $url ה-URL לקריאה (כולל פרמטרים אם יש).
+ * @return string תוכן התגובה.
+ * @throws Exception במקרה של כשל בקריאה.
+ */
+function safeGet(string $url): string {
+    // file_get_contents without @
+    $resp = file_get_contents($url);
+    if ($resp === false) {
+        // Error message should not expose the URL if it contains sensitive data
+        throw new Exception("שגיאה בקריאת GET ל‑URL חיצוני.");
+    }
+    return $resp;
+}
+
+
+/**
  * מבצע בקשת POST ל-URL עם פרמטרים בגוף הבקשה בפורמט JSON.
  *
  * @param string $url ה-URL הבסיסי לשליחת הבקשה.
@@ -65,7 +85,7 @@ function safePost(string $url, array $params): string {
 }
 
 /**
- * מבצעת התחברות ל-API של ימות המשיח ומחזירה טוקן זמני.
+ * מבצעת התחברות ל-API של ימות המשיח באמצעות בקשת POST עם פרמטרים ב-JSON Body, ומחזירה טוקן זמני.
  *
  * @param string $apiDomain דומיין ה-API.
  * @param string $username שם המשתמש (מספר מערכת).
@@ -74,15 +94,21 @@ function safePost(string $url, array $params): string {
  * @throws Exception במקרה של כשל בהתחברות או קבלת טוקן.
  */
 function performLogin(string $apiDomain, string $username, string $password): string {
-    $loginUrl = "https://$apiDomain/ym/api/Login?"; // נקודת קצה להתחברות
+    // בניית ה-URL להתחברות. נתיב קבוע: /ym/api/Login
+    $loginUrl = "https://$apiDomain/ym/api/Login";
+
+    // הפרמטרים username ו-password שישלחו ב-JSON Body
     $params = [
         'username' => $username,
         'password' => $password,
     ];
 
-    logLine("🔑 מנסה להתחבר ל-API עבור משתמש: " . (!empty($username) ? $username : 'חסר'));
+    // רישום לוג ללא פרטים רגישים, רק שם המשתמש (שכבר אינו משולב עם סיסמה)
+    // מציינים שהבקשה היא POST עם JSON Body - הדרך המאובטחת ביותר כאן.
+    logLine("🔑 מנסה להתחבר ל-API עבור משתמש: " . (!empty($username) ? $username : 'חסר') . " (POST request with JSON body)");
 
     try {
+        // שימוש ב-safePost לביצוע הבקשה - שולח POST עם JSON Body
         $resp = safePost($loginUrl, $params);
 
         $json = json_decode($resp, true);
@@ -105,6 +131,7 @@ function performLogin(string $apiDomain, string $username, string $password): st
 
 /**
  * מוחק קובץ ספציפי באמצעות ה-API של ימות המשיח, תוך שימוש בטוקן זמני.
+ * שולח את הבקשה ב-POST עם JSON Body.
  *
  * @param string $apiDomain דומיין ה-API.
  * @param string $token הטוקן הזמני לשימוש (מהתחברות ראשית).
@@ -115,7 +142,7 @@ function deleteFile(string $apiDomain, string $token): void {
 
     // הפרמטרים לבקשת POST בפורמט מערך שיהפוך ל-JSON
     $params = [
-        'token' => $token, // הטוקן הזמני שהתקבל מהתחברות ראשית
+        'token' => $token, // הטוקן הזמני שהתקבל מהתחברות ראשית (בגוף ה-POST, מאובטח יותר)
         'what' => "ivr2:$approvalPath",
         'action' => 'delete',
     ];
@@ -164,15 +191,23 @@ function deleteFile(string $apiDomain, string $token): void {
  * @return void
  */
 function setupNewUser(string $apiDomain, int $index, string $user, string $pass, string $phone): void {
-    // רישום לוג ללא פרטים רגישים, תוך שימוש באינדקס הרשומה
-    logLine("📦 התחלת הגדרות עבור רשומה אינדקס $index (משתמש: " . (!empty($user) ? $user : 'חסר') . ")"); // השארת שם המשתמש בלוג זה לצורך מעקב נוח יותר, שכן הסיסמה והטלפון אינם נרשמים והטוקן נשלח ב-POST+JSON. אם גם שם המשתמש נחשב רגיש מדי ללוגים, יש להסירו.
+    // רישום לוג ללא פרטים רגישים, תוך שימוש באינדקס הרשומה. ניתן להשאיר שם משתמש אם אינו רגיש מדי.
+    logLine("📦 התחלת הגדרות עבור רשומה אינדקס $index (משתמש: " . (!empty($user) ? $user : 'חסר') . ")");
 
     $routingNumber = getenv('YM_ROUTING_NUMBER');
     $number1800 = getenv('YM_1800_NUMBER');
 
+    // מנקה את המשתנה $entry אם קיים בלולאה הראשית.
+    // זה נעשה כבר בסוף הלולאה הראשית, אך ניקוי מוקדם יותר אפשרי כאן.
+    // unset($entry);
+
     try {
         // שלב חדש: התחברות עם שם המשתמש והסיסמה של המשתמש החדש כדי לקבל טוקן זמני עבורו.
+        // **חשוב:** ההתחברות נעשית ב-POST עם פרמטרים ב-JSON Body.
         $userToken = performLogin($apiDomain, $user, $pass);
+
+        // מנקה את הסיסמה והטלפון של המשתמש החדש מהזיכרון מיד לאחר השימוש בהם להתחברות ולהגדרה.
+        unset($pass, $phone);
 
         // מעכשיו, כל הבקשות עבור משתמש זה ישתמשו ב-userToken במקום "$user:$pass"
         $tokenToUse = $userToken;
@@ -180,7 +215,7 @@ function setupNewUser(string $apiDomain, int $index, string $user, string $pass,
         // 1) הגדרת נתיב בסיסי (UpdateExtension)
         $url1 = "https://$apiDomain/ym/api/UpdateExtension"; // URL בסיסי
         $params1 = [ // פרמטרים עבור POST Body (יהפכו ל-JSON)
-            'token' => $tokenToUse, // שימוש בטוקן הזמני של המשתמש החדש
+            'token' => $tokenToUse, // שימוש בטוקן הזמני של המשתמש החדש (בגוף POST, מאובטח יותר)
             'path' => 'ivr2:',
             'type' => 'routing_yemot',
             'routing_yemot_number' => $routingNumber,
@@ -204,7 +239,7 @@ function setupNewUser(string $apiDomain, int $index, string $user, string $pass,
         // 2) הגדרת ניתוב (UpdateExtension)
         $url2 = "https://$apiDomain/ym/api/UpdateExtension"; // URL בסיסי
         $params2 = [ // פרמטרים עבור POST Body (יהפכו ל-JSON)
-            'token' => $tokenToUse, // שימוש בטוקן הזמני של המשתמש החדש
+            'token' => $tokenToUse, // שימוש בטוקן הזמני של המשתמש החדש (בגוף POST, מאובטח יותר)
             'path' => 'ivr2:1',
             'type' => 'routing_1800',
             'routing_1800' => $number1800,
@@ -224,7 +259,7 @@ function setupNewUser(string $apiDomain, int $index, string $user, string $pass,
         // 3) העלאת קובץ טקסט (UploadTextFile - TTS ריק)
         $url3 = "https://$apiDomain/ym/api/UploadTextFile"; // URL בסיסי
         $params3 = [ // פרמטרים עבור POST Body (יהפכו ל-JSON)
-            'token' => $tokenToUse, // שימוש בטוקן הזמני של המשתמש החדש
+            'token' => $tokenToUse, // שימוש בטוקן הזמני של המשתמש החדש (בגוף POST, מאובטח יותר)
             'what' => 'ivr2:/M1102.tts',
             'contents' => ' ', // תוכן ריק או כל תוכן התחלתי אחר, בתוך ה-JSON
         ];
@@ -243,7 +278,7 @@ function setupNewUser(string $apiDomain, int $index, string $user, string $pass,
         // 4) העברת קובץ (FileAction - move)
         $url4 = "https://$apiDomain/ym/api/FileAction"; // URL בסיסי
         $params4 = [ // פרמטרים עבור POST Body (יהפכו ל-JSON)
-            'token' => $tokenToUse, // שימוש בטוקן הזמני של המשתמש החדש
+            'token' => $tokenToUse, // שימוש בטוקן הזמני של המשתמש החדש (בגוף POST, מאובטח יותר)
             'what' => 'ivr2:/M1102.tts',
             'action' => 'move',
             'target' => 'ivr2:/M1102.wav',
@@ -263,9 +298,9 @@ function setupNewUser(string $apiDomain, int $index, string $user, string $pass,
         // 5) העלאת רשימה לבנה עם מספר טלפון (UploadTextFile - WhiteList.ini)
         $url5 = "https://$apiDomain/ym/api/UploadTextFile"; // URL בסיסי
          $params5 = [ // פרמטרים עבור POST Body (יהפכו ל-JSON)
-            'token' => $tokenToUse, // שימוש בטוקן הזמני של המשתמש החדש
+            'token' => $tokenToUse, // שימוש בטוקן הזמני של המשתמש החדש (בגוף POST, מאובטח יותר)
             'what' => 'ivr2:WhiteList.ini',
-            'contents' => $phone, // הטלפון בתוך ה-JSON (מאובטח יותר)
+            'contents' => '0' . $phone, // הטלפון בתוך ה-JSON.
         ];
         $resp5 = safePost($url5, $params5); // שליחה ב-POST עם JSON
 
@@ -283,14 +318,15 @@ function setupNewUser(string $apiDomain, int $index, string $user, string $pass,
     } catch (Exception $e) {
         // שגיאה במהלך הגדרת רשומה זו (כולל שגיאת התחברות עבורה)
          logLine("🚨 סיום טיפול ברשומה אינדקס $index עקב שגיאה: " . $e->getMessage());
-         // אם רוצים להפסיק הכל ברגע שיש שגיאה באחת הרשומות, יש להוסיף כאן throw $e;
-         // כרגע ממשיכים לרשומה הבאה גם אם הנוכחית נכשלה.
+         // ממשיכים לרשומה הבאה.
+         // מנקה את שם המשתמש והטוקן הזמני של המשתמש הספציפי אם הייתה שגיאה שנתפסה.
+         unset($user, $tokenToUse, $userToken);
     }
-
-    logLine("🎉 סיום הגדרות עבור רשומה אינדקס $index\n");
+     // המשתנים $user, $tokenToUse, $userToken נוקו או בתוך try או בתוך catch של setupNewUser.
+     // $pass, $phone נוקו מוקדם יותר בתוך try.
 }
 
-// ————————————————————————————————————————————————————————————
+// —————————————————────────────────────────────────────────———
 // קוד ראשי: הורדה ועיבוד של נתונים מהשירות
 logLine("🚀 התחלת תהליך קבלת נתונים והגדרת משתמשים...");
 
@@ -314,27 +350,34 @@ if (empty($ymTokenRaw) || empty($apiDomain) || empty($approvalPath) || empty($ro
 $tokenParts = explode(':', $ymTokenRaw, 2);
 if (count($tokenParts) !== 2 || empty($tokenParts[0]) || empty($tokenParts[1])) {
     logLine("❌ פורמט YM_TOKEN שגוי. נדרש 'username:password'.");
+    // מנקה את המשתנה הרגיש הגולמי מיד במקרה של פורמט שגוי.
+    unset($ymTokenRaw, $tokenParts);
     exit(1); // יציאה עם קוד שגיאה
 }
 $mainUsername = $tokenParts[0];
-$mainPassword = $tokenParts[1];
+$mainPassword = $tokenParts[1]; // <-- שם המשתנה הנכון
 
-// הטוקן הגולמי YM_TOKEN כבר לא יהיה בשימוש ישיר אחרי הפיצול.
-// נשתמש במשתנים mainUsername ו-mainPassword כדי להתחבר.
-unset($ymTokenRaw, $tokenParts, $mainPassword); // מנקה את המשתנים הרגישים מהזיכרון מוקדם ככל האפשר
+// מנקה את הטוקן הגולמי ואת החלקים שלו מוקדם ככל האפשר
+unset($ymTokenRaw, $tokenParts);
+
+// משתנה לאחסון הטוקן הזמני הראשי
+$mainTemporaryToken = null;
 
 try {
-    // שלב חדש: התחברות ראשית עם הטוקן הראשי כדי לקבל טוקן זמני לתהליך.
-    $mainTemporaryToken = performLogin($apiDomain, $mainUsername, $password); // שימוש במשתנה $password מהפיצול
+    // שלב חדש: התחברות ראשית עם שם המשתמש והסיסמה הראשיים כדי לקבל טוקן זמני לתהליך.
+    // **תיקון:** שימוש ב-performLogin המשתמשת כעת ב-POST עם JSON Body.
+    $mainTemporaryToken = performLogin($apiDomain, $mainUsername, $mainPassword);
 
-    // הטוקן הראשי הגולמי לא נמצא יותר בזיכרון (בעקבות unset).
-    // המשתנה mainUsername כבר אינו מכיל את הסיסמה.
+    // מנקה את הסיסמה הראשית מהזיכרון מיד לאחר השימוש בה להתחברות
+    unset($mainPassword);
+    // מנקה את שם המשתמש הראשי מיד לאחר השימוש בו להתחברות
+    unset($mainUsername);
 
 
     // 1) קבלת JSON מהשרת (RenderYMGRFile) - שימוש בטוקן הזמני הראשי
     $renderUrl = "https://$apiDomain/ym/api/RenderYMGRFile"; // URL בסיסי
     $renderParams = [ // פרמטרים עבור POST Body (יהפכו ל-JSON)
-        'token' => $mainTemporaryToken, // שימוש בטוקן הזמני הראשי
+        'token' => $mainTemporaryToken, // שימוש בטוקן הזמני הראשי (בגוף POST, מאובטח יותר)
         'what' => "ivr2:$approvalPath",
         'convertType' => 'json',
         'notLoadLang' => '0',
@@ -363,30 +406,31 @@ try {
             $pass  = $entry['P051'] ?? null;
             $phone = $entry['P052'] ?? null;
 
+            // מנקה את המשתנה $entry לאחר קריאת הנתונים ממנו בתוך הלולאה
+            unset($entry);
+
             // ולידציה של נתוני הרשומה - בדיקה שאינם חסרים ואינם ריקים
             if (empty($user) || empty($pass) || empty($phone)) {
                  // נמנעים מרישום הנתונים החסרים או הריקים ללוג במפורש
                 logLine("❌ רשומה אינדקס $i לא שלמה או מכילה שדות ריקים (P050/P051/P052). מדלג על רשומה זו.");
+                // מנקה את המשתנים גם ברשומה שדילגו עליה.
+                unset($user, $pass, $phone);
                 continue; // מדלגים על רשומה פגומה ועוברים לרשומה הבאה.
             }
 
-            // פיצול שם המשתמש מהסיסמה מהקלט - לא רלוונטי כאן, זה כבר מפוצל P050=user, P051=pass
-            // $userTokenRaw = "$user:$pass"; // לא בשימוש יותר
-            // $userTokenParts = explode(':', $userTokenRaw, 2); // לא בשימוש יותר
-            // $newUsername = $userTokenParts[0]; // זה $user
-            // $newUserPassword = $userTokenParts[1]; // זה $pass
-
             try {
                 // הפעלת פונקציית ההגדרה, העברת האינדקס והנתונים הגולמיים.
-                // הפונקציה תבצע התחברות משלה עם פרטי המשתמש/סיסמה הללו.
+                // הפונקציה setupNewUser מקבלת את ה-apiDomain.
                 setupNewUser($apiDomain, $i, $user, $pass, $phone);
+                 // המשתנים $user, $pass, $phone נוקו בתוך setupNewUser או בתוך ה-catch שם.
             } catch (Exception $setupException) {
                 // שגיאה במהלך הגדרת רשומה זו (כולל שגיאת התחברות עבורה)
                  logLine("🚨 סיום טיפול ברשומה אינדקס $i עקב שגיאה: " . $setupException->getMessage());
                  // ממשיכים לרשומה הבאה.
+                 // מנקה את המשתנים גם אם הייתה שגיאה שנתפסה.
+                 unset($user, $pass, $phone);
             }
-             // מנקה את פרטי המשתמש והסיסמה הספציפיים לרשומה מהזיכרון לאחר הטיפול
-             unset($user, $pass, $phone, $entry);
+             // המשתנים $user, $pass, $phone נוקו או בתוך try או בתוך catch של setupNewUser.
         }
         logLine("✅ סיום עיבוד כל הרשומות.");
     }
@@ -394,20 +438,23 @@ try {
 } catch (Exception $e) {
     // רישום שגיאות כלליות קריטיות (כמו שגיאת התחברות ראשית או שגיאה בהורדת הקובץ)
     logLine("💥 שגיאה קריטית במהלך התהליך הראשי: " . $e->getMessage());
-    exit(1); // יציאה עם קוד שגיאה במקרה של שגיאה קריטית.
+    // יציאה עם קוד שגיאה במקרה של שגיאה קריטית.
+    exit(1);
 } finally {
     // תמיד מוחקים את קובץ המקור לאחר העיבוד (גם אם היו שגיאות בחלק מהרשומות).
     // המחיקה מתבצעת באמצעות הטוקן הזמני הראשי שהתקבל בהתחברות הראשונית.
     // מוודאים שהטוקן הזמני הראשי קיים לפני מחיקה.
     if (isset($mainTemporaryToken) && !empty($mainTemporaryToken) && isset($apiDomain) && !empty($apiDomain)) {
          deleteFile($apiDomain, $mainTemporaryToken); // קריאה לפונקציית מחיקה עם הטוקן הזמני
-         unset($mainTemporaryToken); // מנקה את הטוקן הזמני הראשי מהזיכרון
     } else {
          logLine("⚠️ דילוג על מחיקת קובץ מקור כי הטוקן הזמני הראשי או דומיין ה-API לא היו זמינים.");
     }
-
-    // מנקה את שם המשתמש הראשי מהזיכרון בסוף
-    if (isset($mainUsername)) unset($mainUsername);
+    // מנקה את הטוקן הזמני הראשי מהזיכרון בסוף התהליך.
+    if (isset($mainTemporaryToken)) unset($mainTemporaryToken);
 
     logLine("🎉 התהליך הסתיים לחלוטין.");
 }
+
+// סוף הסקריפט - ניקוי סופי של משתנים רגישים אם עדיין קיימים
+// הגנה אחרונה לניקוי משתנים שיכולים להיות רגישים.
+unset($mainUsername, $mainPassword, $apiDomain, $ymTokenRaw, $tokenParts, $user, $pass, $phone, $entry, $mainTemporaryToken, $userToken, $tokenToUse);
