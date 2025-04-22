@@ -74,7 +74,7 @@ function safePost(string $url, array $params): string {
  * @throws Exception במקרה של כשל בהתחברות או קבלת טוקן.
  */
 function performLogin(string $apiDomain, string $username, string $password): string {
-    $loginUrl = "https://$apiDomain/ym/api/?Login"; // נקודת קצה להתחברות
+    $loginUrl = "https://$apiDomain/ym/api/Login?"; // נקודת קצה להתחברות
     $params = [
         'username' => $username,
         'password' => $password,
