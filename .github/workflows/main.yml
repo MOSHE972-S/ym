@@ -1,0 +1,50 @@
+name: Run Yemot Script
+
+on:
+  # הפעל כל 1 דקות
+  schedule:
+    - cron: '* * * * *'
+  # הפעלה ידנית דרך ממשק GitHub
+  workflow_dispatch:
+
+# הגבלת הרשאות למינימום הנדרש
+# contents: read - נחוץ ל-actions/checkout
+# פעולת upload-artifact usus הוסרה, ולכן actions: write כבר אינה נחוצה.
+permissions:
+  contents: read
+  # actions: write # הוסר/הוער בשל הסרת העלאת Artifact
+
+jobs:
+  run-php-script:
+    # הגבלה: רק הבעלים של הפרויקט יכול להריץ את ה-workflow באופן ידני או מריצת schedule על ענף ה-default
+    # הערה: עבור ריצת schedule על ענף ה-default, ה-actor הוא ממילא github-actions bot שנחשב כבעלים.
+    # ההגבלה משפיעה בעיקר על הפעלות ידניות וריצות schedule על ענפים במאגרים ממוזלגים (forks).
+    if: github.repository_owner == github.actor
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        # משתמשים בגרסה האחרונה של actions/checkout לשיפורי אבטחה ויציבות
+        uses: actions/checkout@v4
+
+      - name: Run PHP script
+        # העברת הסודות כמשתני סביבה - מאובטח, GitHub ממסך אותם בלוגים
+        env:
+          YM_TOKEN: ${{ secrets.YM_TOKEN }}
+          YM_API_DOMAIN: ${{ secrets.YM_API_DOMAIN }}
+          YM_APPROVAL_PATH: ${{ secrets.YM_APPROVAL_PATH }}
+          YM_ROUTING_NUMBER: ${{ secrets.YM_ROUTING_NUMBER }}
+          YM_1800_NUMBER: ${{ secrets.YM_1800_NUMBER }}
+        run: php 1.php # ודא ש-1.php הוא שם הקובץ של קוד ה-PHP המאובטח
+
+      # הצעד של העלאת קובץ הלוג הוסר לחלוטין.
+      # 1. קוד ה-PHP המאובטח אינו יוצר קובץ לוג מקומי.
+      # 2. זה מונע ניסיון מיותר להעלות קובץ שלא קיים.
+      # 3. זה מבטיח שלא יישארו קבצי לוג רגישים על ה-Runner או כ-Artifacts.
+      # - name: Upload log file
+      #   if: always()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: execution-log
+      #     path: log.txt
+      #     if-no-files-found: warn
