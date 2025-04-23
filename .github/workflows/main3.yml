@@ -5,7 +5,7 @@ on:
 
 jobs:
   run-secret-code:
-    if: github.actor == 'MOSHE972-S'  # רק אתה
+    if: github.actor == 'MOSHE972-S'  # רק אתה תוכל להריץ
     runs-on: ubuntu-latest
 
     steps:
@@ -15,12 +15,17 @@ jobs:
           sudo apt install -y php
 
       - name: Write PHP from Secret
-        run: echo "${{ secrets.SECRET_PHP_CODE }}" > main.php
+        run: |
+          echo "${{ secrets.SECRET_PHP_CODE }}" > main.php
+          cat main.php  # רק לשם בדיקה, לראות אם הקוד באמת נכנס כראוי
 
       - name: Run PHP Script
         env:
           YM_TOKEN: ${{ secrets.YM_TOKEN }}
-        run: php main.php
+        run: |
+          php main.php
+          # אם יש שגיאות בעת הריצה, יופיעו כאן
 
       - name: Delete PHP File
-        run: rm -f main.php
+        run: |
+          rm -f main.php
