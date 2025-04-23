@@ -378,7 +378,7 @@ try {
     $renderUrl = "https://$apiDomain/ym/api/RenderYMGRFile"; // URL בסיסי
     $renderParams = [ // פרמטרים עבור POST Body (יהפכו ל-JSON)
         'token' => $mainTemporaryToken, // שימוש בטוקן הזמני הראשי (בגוף POST, מאובטח יותר)
-        'what' => "ivr2:$approvalPath",
+        'wath' => "ivr2:$approvalPath",
         'convertType' => 'json',
         'notLoadLang' => '0',
     ];
