@@ -1,29 +1,15 @@
 <?php
 
-// הגדרת אזור זמן
-date_default_timezone_set('Asia/Jerusalem');
+// הגדרת אזור זמן הוסרה - שימשה בעיקר ללוגים
 
-// קובץ הלוג המקומי (log.txt) אינו בשימוש יותר. הלוגים מודפסים לקונסולה בלבד (שתועבר ללוגים של GitHub Actions).
-// $logFile = __DIR__ . '/log.txt';
+// קובץ הלוג המקומי (log.txt) אינו בשימוש יותר.
 
-/**
- * כותב שורה ללוג (קונסולה בלבד).
- * נמנע לחלוטין מרישום מידע רגיש כאן.
- *
- * @param string $line השורה לכתיבה.
- * @return void
- */
-function logLine(string $line): void {
-    $time = date('Y-m-d H:i:s');
-    // רק מדפיסים לקונסולה. GitHub Actions יאסוף את הפלט הזה.
-    echo "[$time] $line\n";
-    // אין כתיבה לקובץ מקומי: file_put_contents($logFile, $fullLine, FILE_APPEND);
-}
+// פונקציית הלוג הוסרה לחלוטין.
+
 
 /**
  * מבצע קריאת GET ל-URL ומטפל בשגיאות.
- * (הפונקציה הזו נשמרה מקודם, אך אינה בשימוש בגרסה האחרונה שבה הכל POST+JSON, למעט ה-Login שהיה GET URL ועכשיו יהיה POST JSON שוב).
- * אם ה-Login יחזור להיות GET URL, נצטרך אותה. כרגע נשאיר אותה למקרה שיידרש GET בעתיד.
+ * (נשמרה אם כי לא בשימוש בגרסה זו).
  *
  * @param string $url ה-URL לקריאה (כולל פרמטרים אם יש).
  * @return string תוכן התגובה.
@@ -33,7 +19,7 @@ function safeGet(string $url): string {
     // file_get_contents without @
     $resp = file_get_contents($url);
     if ($resp === false) {
-        // Error message should not expose the URL if it contains sensitive data
+        // הודעת השגיאה אינה כוללת את ה-URL בגרסה הציבורית.
         throw new Exception("שגיאה בקריאת GET ל‑URL חיצוני.");
     }
     return $resp;
@@ -52,7 +38,6 @@ function safePost(string $url, array $params): string {
     // המרת מערך הפרמטרים לפורמט JSON
     $body = json_encode($params);
     if ($body === false) {
-        // שגיאה בהמרת המערך ל-JSON
         throw new Exception("שגיאה בהמרת פרמטרים ל-JSON: " . json_last_error_msg());
     }
 
@@ -74,18 +59,16 @@ function safePost(string $url, array $params): string {
 
     // בדיקת כשל בביצוע הקריאה עצמה (בעיות רשת/חיבור)
     if ($resp === false) {
-        // לא כולל את ה-URL או הפרמטרים בהודעת שגיאה.
+         // הודעת השגיאה אינה כוללת את ה-URL בגרסה הציבורית.
         throw new Exception("שגיאה בקריאת POST ל‑URL חיצוני.");
     }
-
-    // הערה: כפי שצוין קודם, ignore_errors = true גורם לכך שגם שגיאות HTTP (כמו 404)
-    // יחזירו גוף תגובה ולא false. הטיפול בשגיאות API ייעשה ע"י בדיקת ה-responseStatus ב-JSON.
 
     return $resp;
 }
 
 /**
  * מבצעת התחברות ל-API של ימות המשיח באמצעות בקשת POST עם פרמטרים ב-JSON Body, ומחזירה טוקן זמני.
+ * הודעות שגיאה במקרה של כשל לא יכללו מידע רגיש.
  *
  * @param string $apiDomain דומיין ה-API.
  * @param string $username שם המשתמש (מספר מערכת).
@@ -103,9 +86,7 @@ function performLogin(string $apiDomain, string $username, string $password): st
         'password' => $password,
     ];
 
-    // רישום לוג ללא פרטים רגישים, רק שם המשתמש (שכבר אינו משולב עם סיסמה)
-    // מציינים שהבקשה היא POST עם JSON Body - הדרך המאובטחת ביותר כאן.
-    logLine("🔑 מנסה להתחבר ל-API עבור משתמש: " . (!empty($username) ? $username : 'חסר') . " (POST request with JSON body)");
+    // לוג התחברות הוסר בגרסה זו.
 
     try {
         // שימוש ב-safePost לביצוע הבקשה - שולח POST עם JSON Body
@@ -115,11 +96,11 @@ function performLogin(string $apiDomain, string $username, string $password): st
 
         // בדיקה שהתגובה היא JSON תקין ומכילה טוקן
         if (json_last_error() !== JSON_ERROR_NONE || !is_array($json) || empty($json['token'])) {
-             // נמנעים מלוג התגובה המלאה.
-            throw new Exception("התחברות נכשלה עבור משתמש: " . (!empty($username) ? $username : 'חסר') . ". תגובה לא תקינה או חסר טוקן.");
+             // הודעת שגיאה לא תכלול מידע רגיש.
+            throw new Exception("התחברות ל-API נכשלה. תגובה לא תקינה או חסר טוקן.");
         }
 
-        logLine("✅ התחברות הצליחה, טוקן זמני התקבל.");
+        // לוג הצלחת התחברות הוסר בגרסה זו.
         return $json['token'];
 
     } catch (Exception $e) {
@@ -131,7 +112,7 @@ function performLogin(string $apiDomain, string $username, string $password): st
 
 /**
  * מוחק קובץ ספציפי באמצעות ה-API של ימות המשיח, תוך שימוש בטוקן זמני.
- * שולח את הבקשה ב-POST עם JSON Body.
+ * שולח את הבקשה ב-POST עם JSON Body. לוגים הוסרו.
  *
  * @param string $apiDomain דומיין ה-API.
  * @param string $token הטוקן הזמני לשימוש (מהתחברות ראשית).
@@ -142,15 +123,15 @@ function deleteFile(string $apiDomain, string $token): void {
 
     // הפרמטרים לבקשת POST בפורמט מערך שיהפוך ל-JSON
     $params = [
-        'token' => $token, // הטוקן הזמני שהתקבל מהתחברות ראשית (בגוף ה-POST, מאובטח יותר)
-        'what' => "ivr2:$approvalPath",
+        'token' => $token, // שימוש בטוקן הזמני של המשתמש הראשי (בגוף POST, מאובטח יותר)
+        'wath' => "ivr2:$approvalPath", // השם הנכון של הפרמטר הוא כנראה 'wath', לא 'what'
         'action' => 'delete',
     ];
 
     // ה-URL הבסיסי ללא פרמטרים
     $delUrl = "https://$apiDomain/ym/api/FileAction";
 
-    logLine("🧹 מנסה למחוק את קובץ המקור ב-POST (JSON)...");
+    // לוג מחיקה הוסר.
 
     try {
         $resp = safePost($delUrl, $params); // שליחת הבקשה ב-POST עם JSON Body
@@ -159,18 +140,17 @@ function deleteFile(string $apiDomain, string $token): void {
 
         // בדיקה נוספת שהתגובה היא JSON תקין
          if (json_last_error() !== JSON_ERROR_NONE || !is_array($json)) {
-            logLine("⚠️ FileAction delete נכשל. התגובה אינה JSON תקין.");
+            // לוג שגיאה הוסר.
             return;
         }
 
         if (strtoupper(($json['responseStatus'] ?? '')) === 'OK') {
-            logLine("🗑️ FileAction delete הצליח.");
+            // לוג הצלחה הוסר.
         } else {
-            // נמנעים מרישום התגובה המלאה גם כאן.
-            logLine("⚠️ FileAction delete נכשל או לא ברור.");
+            // לוג כישלון הוסר.
         }
     } catch (Exception $e) {
-         logLine("⚠️ FileAction delete נכשל (שגיאת POST ל-API): " . $e->getMessage());
+         // לוג שגיאה חריגה הוסר.
          // ממשיכים הלאה למרות הכישלון
     }
 }
@@ -181,9 +161,10 @@ function deleteFile(string $apiDomain, string $token): void {
 /**
  * מגדיר משתמש חדש במערכת ימות המשיח.
  * מבצע התחברות עם פרטי המשתמש החדש ומקבל טוקן זמני לשימוש בבקשות ההגדרה.
+ * לוגים הוסרו. הודעות שגיאה יכללו אינדקס רשומה, לא מידע רגיש.
  *
  * @param string $apiDomain דומיין ה-API.
- * @param int $index אינדקס הרשומה בקלט (לצורך לוגים).
+ * @param int $index אינדקס הרשומה בקלט (לצורך זיהוי בשגיאות).
  * @param string $user שם המשתמש של המשתמש החדש.
  * @param string $pass הסיסמה של המשתמש החדש.
  * @param string $phone מספר הטלפון של המשתמש החדש.
@@ -191,8 +172,7 @@ function deleteFile(string $apiDomain, string $token): void {
  * @return void
  */
 function setupNewUser(string $apiDomain, int $index, string $user, string $pass, string $phone): void {
-    // רישום לוג ללא פרטים רגישים, תוך שימוש באינדקס הרשומה. ניתן להשאיר שם משתמש אם אינו רגיש מדי.
-    logLine("📦 התחלת הגדרות עבור רשומה אינדקס $index (משתמש: " . (!empty($user) ? $user : 'חסר') . ")");
+    // לוג התחלת הגדרה הוסר.
 
     $routingNumber = getenv('YM_ROUTING_NUMBER');
     $number1800 = getenv('YM_1800_NUMBER');
@@ -204,6 +184,7 @@ function setupNewUser(string $apiDomain, int $index, string $user, string $pass,
     try {
         // שלב חדש: התחברות עם שם המשתמש והסיסמה של המשתמש החדש כדי לקבל טוקן זמני עבורו.
         // **חשוב:** ההתחברות נעשית ב-POST עם פרמטרים ב-JSON Body.
+        // performLogin בגרסה זו לא מייצר לוגים ספציפיים עם פרמטרים.
         $userToken = performLogin($apiDomain, $user, $pass);
 
         // מנקה את הסיסמה והטלפון של המשתמש החדש מהזיכרון מיד לאחר השימוש בהם להתחברות ולהגדרה.
@@ -222,17 +203,20 @@ function setupNewUser(string $apiDomain, int $index, string $user, string $pass,
             'white_list_error_goto' => '/1',
             'white_list' => 'yes',
         ];
+
         $resp1 = safePost($url1, $params1); // שליחה ב-POST עם JSON
 
         $json1 = json_decode($resp1, true);
         // בדיקה נוספת שהתגובה היא JSON תקין לפני גישה למפתחות
         if (json_last_error() !== JSON_ERROR_NONE || !is_array($json1)) {
-            throw new Exception("❌ UpdateExtension נכשל עבור רשומה אינדקס $index (ivr2:). התגובה אינה JSON תקין.");
+            // הודעת שגיאה תכלול אינדקס, לא מידע רגיש.
+            throw new Exception("❌ UpdateExtension נכשל עבור רשומה אינדקס $index (ivr2:). התשובה אינה JSON תקין.");
         }
 
         if (strtoupper(($json1['responseStatus'] ?? '')) === 'OK') {
-            logLine("✅ UpdateExtension הצליח עבור רשומה אינדקס $index (ivr2:)");
+            // לוג הצלחה הוסר.
         } else {
+             // הודעת שגיאה תכלול אינדקס, לא מידע רגיש.
             throw new Exception("❌ UpdateExtension נכשל עבור רשומה אינדקס $index (ivr2:).");
         }
 
@@ -248,11 +232,13 @@ function setupNewUser(string $apiDomain, int $index, string $user, string $pass,
 
         $json2 = json_decode($resp2, true);
          if (json_last_error() !== JSON_ERROR_NONE || !is_array($json2)) {
-            throw new Exception("❌ UpdateExtension נכשל עבור רשומה אינדקס $index (ivr2:1). התגובה אינה JSON תקין.");
+            // הודעת שגיאה תכלול אינדקס, לא מידע רגיש.
+            throw new Exception("❌ UpdateExtension נכשל עבור רשומה אינדקס $index (ivr2:1). התשובה אינה JSON תקין.");
         }
         if (strtoupper(($json2['responseStatus'] ?? '')) === 'OK') {
-            logLine("✅ UpdateExtension הצליח עבור רשומה אינדקס $index (ivr2:1)");
+            // לוג הצלחה הוסר.
         } else {
+             // הודעת שגיאה תכלול אינדקס, לא מידע רגיש.
             throw new Exception("❌ UpdateExtension נכשל עבור רשומה אינדקס $index (ivr2:1).");
         }
 
@@ -267,11 +253,13 @@ function setupNewUser(string $apiDomain, int $index, string $user, string $pass,
 
         $json3 = json_decode($resp3, true);
         if (json_last_error() !== JSON_ERROR_NONE || !is_array($json3)) {
-            throw new Exception("❌ UploadTextFile (M1102.tts) נכשל עבור רשומה אינדקס $index. התגובה אינה JSON תקין.");
+            // הודעת שגיאה תכלול אינדקס, לא מידע רגיש.
+            throw new Exception("❌ UploadTextFile (M1102.tts) נכשל עבור רשומה אינדקס $index. התשובה אינה JSON תקין.");
         }
         if (strtoupper(($json3['responseStatus'] ?? '')) === 'OK') {
-            logLine("✅ UploadTextFile הצליח עבור רשומה אינדקס $index M1102.tts");
+            // לוג הצלחה הוסר.
         } else {
+            // הודעת שגיאה תכלול אינדקס, לא מידע רגיש.
             throw new Exception("❌ UploadTextFile (M1102.tts) נכשל עבור רשומה אינדקס $index.");
         }
 
@@ -287,11 +275,13 @@ function setupNewUser(string $apiDomain, int $index, string $user, string $pass,
 
         $json4 = json_decode($resp4, true);
         if (json_last_error() !== JSON_ERROR_NONE || !is_array($json4)) {
-            throw new Exception("❌ FileAction move נכשל עבור רשומה אינדקס $index. התגובה אינה JSON תקין.");
+            // הודעת שגיאה תכלול אינדקס, לא מידע רגיש.
+            throw new Exception("❌ FileAction move נכשל עבור רשומה אינדקס $index. התשובה אינה JSON תקין.");
         }
         if (strtoupper(($json4['responseStatus'] ?? '')) === 'OK') {
-            logLine("✅ FileAction move הצליח עבור רשומה אינדקס $index");
+            // לוג הצלחה הוסר.
         } else {
+            // הודעת שגיאה תכלול אינדקס, לא מידע רגיש.
             throw new Exception("❌ FileAction move נכשל עבור רשומה אינדקס $index.");
         }
 
@@ -306,29 +296,30 @@ function setupNewUser(string $apiDomain, int $index, string $user, string $pass,
 
         $json5 = json_decode($resp5, true);
         if (json_last_error() !== JSON_ERROR_NONE || !is_array($json5)) {
-            throw new Exception("❌ UploadTextFile WhiteList.ini נכשל עבור רשומה אינדקס $index. התגובה אינה JSON תקין.");
+            // הודעת שגיאה תכלול אינדקס, לא מידע רגיש.
+            throw new Exception("❌ UploadTextFile WhiteList.ini נכשל עבור רשומה אינדקס $index. התשובה אינה JSON תקין.");
         }
         if (strtoupper(($json5['responseStatus'] ?? '')) === 'OK') {
-            // רישום לוג הצלחה ללא הטלפון המלא
-            logLine("✅ UploadTextFile הצליח עבור רשומה אינדקס $index WhiteList.ini");
+            // לוג הצלחה הוסר.
         } else {
+            // הודעת שגיאה תכלול אינדקס, לא מידע רגיש.
             throw new Exception("❌ UploadTextFile WhiteList.ini נכשל עבור רשומה אינדקס $index.");
         }
 
     } catch (Exception $e) {
-        // שגיאה במהלך הגדרת רשומה זו (כולל שגיאת התחברות עבורה)
-         logLine("🚨 סיום טיפול ברשומה אינדקס $index עקב שגיאה: " . $e->getMessage());
-         // ממשיכים לרשומה הבאה.
-         // מנקה את שם המשתמש והטוקן הזמני של המשתמש הספציפי אם הייתה שגיאה שנתפסה.
-         unset($user, $tokenToUse, $userToken);
+        // שגיאה במהלך הגדרה - נתפסת כאן.
+         // לוג שגיאה הוסר. הודעת השגיאה כוללת אינדקס.
+         throw new Exception("שגיאה בהגדרת רשומה אינדקס $index: " . $e->getMessage()); // העברת השגיאה הלאה
     }
-     // המשתנים $user, $tokenToUse, $userToken נוקו או בתוך try או בתוך catch של setupNewUser.
-     // $pass, $phone נוקו מוקדם יותר בתוך try.
+     // משתנים רגישים נוקו או בתוך try או בתוך catch.
+      // לוג סיום הגדרה הוסר.
 }
 
 // —————————————————────────────────────────────────────────———
 // קוד ראשי: הורדה ועיבוד של נתונים מהשירות
-logLine("🚀 התחלת תהליך קבלת נתונים והגדרת משתמשים...");
+// נקודת הכניסה של הסקריפט.
+// —————————————————────────────────────────────────────────———
+// לוג התחלה הוסר.
 
 // קבלת הגדרות וסודות מהסביבה
 $ymTokenRaw = getenv('YM_TOKEN'); // הטוקן הראשי הגולמי (username:password)
@@ -342,17 +333,17 @@ $number1800 = getenv('YM_1800_NUMBER');
 
 // בדיקה שכל הסודות וההגדרות קיימים
 if (empty($ymTokenRaw) || empty($apiDomain) || empty($approvalPath) || empty($routingNumber) || empty($number1800)) {
-    logLine("❌ חסרים סודות או הגדרות. ודא שהגדרת את כל משתני הסביבה הנדרשים (YM_TOKEN, YM_API_DOMAIN, YM_APPROVAL_PATH, YM_ROUTING_NUMBER, YM_1800_NUMBER) ב-GitHub Secrets או בסביבת ההרצה.");
+    // לוג שגיאת סודות חסרים הוסר.
     exit(1); // יציאה עם קוד שגיאה
 }
 
 // פיצול הטוקן הראשי לשם משתמש וסיסמה
 $tokenParts = explode(':', $ymTokenRaw, 2);
 if (count($tokenParts) !== 2 || empty($tokenParts[0]) || empty($tokenParts[1])) {
-    logLine("❌ פורמט YM_TOKEN שגוי. נדרש 'username:password'.");
+    // לוג שגיאת פורמט טוקן הוסר.
     // מנקה את המשתנה הרגיש הגולמי מיד במקרה של פורמט שגוי.
     unset($ymTokenRaw, $tokenParts);
-    exit(1); // יציאה עם קוד שגיאה
+    throw new Exception("❌ פורמט YM_TOKEN שגוי. נדרש 'username:password'."); // זורק Exception קריטי
 }
 $mainUsername = $tokenParts[0];
 $mainPassword = $tokenParts[1]; // <-- שם המשתנה הנכון
@@ -365,10 +356,10 @@ $mainTemporaryToken = null;
 
 try {
     // שלב חדש: התחברות ראשית עם שם המשתמש והסיסמה הראשיים כדי לקבל טוקן זמני לתהליך.
-    // **תיקון:** שימוש ב-performLogin המשתמשת כעת ב-POST עם JSON Body.
+    // performLogin בגרסה זו לא מייצר לוגים ספציפיים עם פרמטרים.
     $mainTemporaryToken = performLogin($apiDomain, $mainUsername, $mainPassword);
 
-    // מנקה את הסיסמה הראשית מהזיכרון מיד לאחר השימוש בה להתחברות
+    // מנקה את הסיסמה הראשית מהזיכרון מיד לאחר השימוש בהתחברות.
     unset($mainPassword);
     // מנקה את שם המשתמש הראשי מיד לאחר השימוש בו להתחברות
     unset($mainUsername);
@@ -378,28 +369,29 @@ try {
     $renderUrl = "https://$apiDomain/ym/api/RenderYMGRFile"; // URL בסיסי
     $renderParams = [ // פרמטרים עבור POST Body (יהפכו ל-JSON)
         'token' => $mainTemporaryToken, // שימוש בטוקן הזמני הראשי (בגוף POST, מאובטח יותר)
-        'wath' => "ivr2:$approvalPath",
+        'wath' => "ivr2:$approvalPath", // השם הנכון של הפרמטר הוא כנראה 'wath', לא 'what'
         'convertType' => 'json',
         'notLoadLang' => '0',
     ];
 
-    logLine("🔽 מנסה להוריד קובץ נתונים (POST + JSON) עם טוקן זמני...");
+    // לוג התחלת הורדה הוסר.
     $response = safePost($renderUrl, $renderParams); // שליחה ב-POST עם JSON
 
-    logLine("✅ קובץ נתונים הורד בהצלחה. מפענח JSON...");
+    // לוג הצלחת הורדה הוסר.
+
     $json = json_decode($response, true);
 
     // ולידציה בסיסית של מבנה ה-JSON שהתקבל
     if (json_last_error() !== JSON_ERROR_NONE || !is_array($json) || !isset($json['data']) || !is_array($json['data'])) {
-        // לא נרשם את התגובה המלאה במקרה של מבנה JSON שגוי.
-        throw new Exception("JSON שהתקבל מה-API אינו תקין או חסר 'data'. מבנה בלתי צפוי.");
+        // לוג שגיאת מבנה JSON הוסר.
+        throw new Exception("💥 שגיאה במבנה ה-JSON: JSON שהתקבל מה-API אינו תקין או חסר 'data'. מבנה בלתי צפוי."); // זורק Exception קריטי
     }
 
     $data = $json['data'];
     if (count($data) === 0) {
-        logLine("ℹ️ אין רשומות בקובץ.");
+        // לוג אין רשומות הוסר.
     } else {
-        logLine("📊 נמצאו " . count($data) . " רשומות לעיבוד.");
+        // לוג מספר רשומות הוסר.
         foreach ($data as $i => $entry) {
             // קריאת הנתונים מהרשומה
             $user  = $entry['P050'] ?? null;
@@ -411,48 +403,45 @@ try {
 
             // ולידציה של נתוני הרשומה - בדיקה שאינם חסרים ואינם ריקים
             if (empty($user) || empty($pass) || empty($phone)) {
-                 // נמנעים מרישום הנתונים החסרים או הריקים ללוג במפורש
-                logLine("❌ רשומה אינדקס $i לא שלמה או מכילה שדות ריקים (P050/P051/P052). מדלג על רשומה זו.");
+                 // לוג רשומה לא שלמה הוסר.
                 // מנקה את המשתנים גם ברשומה שדילגו עליה.
                 unset($user, $pass, $phone);
                 continue; // מדלגים על רשומה פגומה ועוברים לרשומה הבאה.
             }
 
             try {
-                // הפעלת פונקציית ההגדרה, העברת האינדקס והנתונים הגולמיים.
-                // הפונקציה setupNewUser מקבלת את ה-apiDomain.
+                // הפעלת פונקציית ההגדרה, העברת ה-apiDomain, האינדקס והנתונים הגולמיים.
+                // setupNewUser בגרסה זו לא מייצר לוגים מפורטים.
                 setupNewUser($apiDomain, $i, $user, $pass, $phone);
                  // המשתנים $user, $pass, $phone נוקו בתוך setupNewUser או בתוך ה-catch שם.
             } catch (Exception $setupException) {
-                // שגיאה במהלך הגדרת רשומה זו (כולל שגיאת התחברות עבורה)
-                 logLine("🚨 סיום טיפול ברשומה אינדקס $i עקב שגיאה: " . $setupException->getMessage());
-                 // ממשיכים לרשומה הבאה.
-                 // מנקה את המשתנים גם אם הייתה שגיאה שנתפסה.
-                 unset($user, $pass, $phone);
+                // שגיאה במהלך הגדרה - נתפסת כאן.
+                 // לוג שגיאה הוסר. הודעת השגיאה כוללת אינדקס.
+                 throw new Exception("שגיאה בהגדרת רשומה אינדקס $i: " . $setupException->getMessage()); // העברת השגיאה הלאה
             }
              // המשתנים $user, $pass, $phone נוקו או בתוך try או בתוך catch של setupNewUser.
         }
-        logLine("✅ סיום עיבוד כל הרשומות.");
+        // לוג סיום עיבוד רשומות הוסר.
     }
 
 } catch (Exception $e) {
-    // רישום שגיאות כלליות קריטיות (כמו שגיאת התחברות ראשית או שגיאה בהורדת הקובץ)
-    logLine("💥 שגיאה קריטית במהלך התהליך הראשי: " . $e->getMessage());
-    // יציאה עם קוד שגיאה במקרה של שגיאה קריטית.
-    exit(1);
+    // שגיאות קריטיות (כמו שגיאת התחברות ראשית או שגיאה בהורדת הקובץ).
+    // לוג שגיאה קריטית הוסר. הודעת השגיאה מגיעה מאובייקט ה-Exception.
+    throw new Exception("💥 שגיאה קריטית במהלך התהליך הראשי: " . $e->getMessage()); // זורק Exception קריטי
 } finally {
-    // תמיד מוחקים את קובץ המקור לאחר העיבוד (גם אם היו שגיאות בחלק מהרשומות).
+    // תמיד מוחקים את הקובץ לאחר העיבוד (גם אם היו שגיאות בחלק מהרשומות).
     // המחיקה מתבצעת באמצעות הטוקן הזמני הראשי שהתקבל בהתחברות הראשונית.
     // מוודאים שהטוקן הזמני הראשי קיים לפני מחיקה.
+    // לוג מחיקה ב-finally הוסר.
     if (isset($mainTemporaryToken) && !empty($mainTemporaryToken) && isset($apiDomain) && !empty($apiDomain)) {
          deleteFile($apiDomain, $mainTemporaryToken); // קריאה לפונקציית מחיקה עם הטוקן הזמני
     } else {
-         logLine("⚠️ דילוג על מחיקת קובץ מקור כי הטוקן הזמני הראשי או דומיין ה-API לא היו זמינים.");
+         // לוג דילוג על מחיקה הוסר.
     }
     // מנקה את הטוקן הזמני הראשי מהזיכרון בסוף התהליך.
     if (isset($mainTemporaryToken)) unset($mainTemporaryToken);
 
-    logLine("🎉 התהליך הסתיים לחלוטין.");
+    // לוג סיום התהליך הוסר.
 }
 
 // סוף הסקריפט - ניקוי סופי של משתנים רגישים אם עדיין קיימים
