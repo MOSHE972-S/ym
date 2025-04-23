@@ -1,0 +1,26 @@
+name: Run Hidden PHP Script
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-secret-code:
+    if: github.actor == 'MOSHE972-S'  # רק אתה
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup PHP
+        run: |
+          sudo apt update
+          sudo apt install -y php
+
+      - name: Write PHP from Secret
+        run: echo "${{ secrets.SECRET_PHP_CODE }}" > main.php
+
+      - name: Run PHP Script
+        env:
+          YM_TOKEN: ${{ secrets.YM_TOKEN }}
+        run: php main.php
+
+      - name: Delete PHP File
+        run: rm -f main.php
